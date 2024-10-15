@@ -18,7 +18,8 @@ constexpr uint64_t FRACTION = 16;
 // using Field = int;
 
 // using Field = ZZ_p; 
-using Field = int32_t;
+// using Field = int32_t;
+using Field = int64_t;
 
 class BoolRing {
   bool val_;

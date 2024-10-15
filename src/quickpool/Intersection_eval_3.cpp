@@ -19,13 +19,13 @@ void Intersection_eval::setInputs() {
         int max_val = 5000;
         int count = VERTEX_NUM; // number of route vertices
 
-        std::vector<uint64_t> sample_space(2*max_val);
+        std::vector<uint64_t> sample_space(max_val);
         std::iota(sample_space.begin(), sample_space.end(), 1);
         std::random_shuffle(sample_space.begin(),sample_space.end());
 
-        uint64_t val1 = uint64_t(sample_space[0])<<32 ^ sample_space[1];
-        for (size_t i=0, j=2; i<count; i++, j+=2) {            
-            uint64_t val2 = uint64_t(sample_space[j])<<32 ^ sample_space[j+1];
+        uint64_t val1 = uint64_t(sample_space[0]);
+        for (size_t i=0, j=1; i<count; i++, j++) {            
+            uint64_t val2 = uint64_t(sample_space[j]);
             emp::block val = emp::makeBlock(val1,0) ^ emp::makeBlock(0,val2); // making a pair of the points
             routes[i] = val;
             val1 = val2;

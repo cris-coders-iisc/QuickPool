@@ -55,18 +55,18 @@ BOOST_AUTO_TEST_CASE(intersection_test) {
       ZZ_p_ctx.restore();       
       // auto network = std::make_shared<io::NetIOMP>(i, nP+1, 10000, nullptr, true);  
       auto network = std::make_shared<io::NetIOMP>(i, rider_count, driver_count, 10000, nullptr, true); 
-      Intersection_eval iter_eval(i, rider_count, driver_count, network, SECURITY_PARAM, nP);   
-      iter_eval.setInputs();
+      Intersection_eval iter_eval(i, rider_count, driver_count, network, SECURITY_PARAM, nP);      
       if (i!=0) {
+        iter_eval.setInputs();
         #ifdef Inter_v1
           all_routes[i-1] = iter_eval.getInputs();
         #else 
           #ifdef Inter_v2
             all_routes[i-1] = new __m128i[VERTEX_NUM];
-            memcpy(all_routes[i-1], iter_eval.getInputs(), sizeof(all_routes[i-1]));
+            memcpy(all_routes[i-1], iter_eval.getInputs(), VERTEX_NUM*sizeof(emp::block));
           #else
             all_routes[i-1] = new emp::block[VERTEX_NUM];
-            memcpy(all_routes[i-1], iter_eval.getInputs(), sizeof(all_routes[i-1]));   
+            memcpy(all_routes[i-1], iter_eval.getInputs(), VERTEX_NUM*sizeof(emp::block)); 
           #endif
         #endif
       }        
@@ -113,8 +113,6 @@ BOOST_AUTO_TEST_CASE(intersection_test) {
           __m128i *d_vec = all_routes[rider_count+d];
           // count number of common values
           int match_count=0;
-          size_t r_index = r*driver_count*VERTEX_NUM+d*VERTEX_NUM;
-          size_t d_index = d*rider_count*VERTEX_NUM+r*VERTEX_NUM;
           for (size_t k=0; k<VERTEX_NUM; k++) {
               emp::block r_elem = r_vec[k];
               for (size_t l=0; l<VERTEX_NUM; l++) {
@@ -145,8 +143,6 @@ BOOST_AUTO_TEST_CASE(intersection_test) {
           emp::block *d_vec = all_routes[rider_count+d];
           // count number of common values
           int match_count=0;
-          size_t r_index = r*driver_count*VERTEX_NUM+d*VERTEX_NUM;
-          size_t d_index = d*rider_count*VERTEX_NUM+r*VERTEX_NUM;
           for (size_t k=0; k<VERTEX_NUM; k++) {
               emp::block r_elem = r_vec[k];
               for (size_t l=0; l<VERTEX_NUM; l++) {
