@@ -283,28 +283,35 @@ void OfflineEvaluator::setWireMasks(
     setWireMasksParty(input_pid_map, rand_sh_sec, rand_sh_party);
 
     if(id_ == 0) {
-      
-      for (int driver=0; driver<driver_count; driver++){
-        size_t rand_sh_sec_num = rand_sh_sec[driver].size();      
-        size_t rand_sh_party_num = rand_sh_party[driver].size();
-        size_t arith_comm = rand_sh_sec_num + rand_sh_party_num;
-      
-        std::vector<size_t> lengths(3);
-        lengths[0] = arith_comm;
-        lengths[1] = rand_sh_sec_num;
-        lengths[2] = rand_sh_party_num;
 
-        network_->send(driver+rider_count+1, lengths.data(), sizeof(size_t) * lengths.size());
-
-        std::vector<Field> offline_arith_comm(arith_comm);
+      std::vector<std::future<void>> offline_t;
       
-        for(size_t i = 0; i < rand_sh_sec_num; i++) {
-          offline_arith_comm[i] = rand_sh_sec[driver][i];
-        }
-        for(size_t i = 0; i < rand_sh_party_num; i++) {
-          offline_arith_comm[rand_sh_sec_num + i] = rand_sh_party[driver][i];
-        }
-        network_->send(driver+rider_count+1, offline_arith_comm.data(), sizeof(Field) * arith_comm);
+      for (int driver=0; driver<driver_count; driver++){        
+        offline_t.push_back(tpool_->enqueue([&,driver]() {
+          size_t rand_sh_sec_num = rand_sh_sec[driver].size();      
+          size_t rand_sh_party_num = rand_sh_party[driver].size();
+          size_t arith_comm = rand_sh_sec_num + rand_sh_party_num;
+        
+          std::vector<size_t> lengths(3);
+          lengths[0] = arith_comm;
+          lengths[1] = rand_sh_sec_num;
+          lengths[2] = rand_sh_party_num;
+
+          network_->send(driver+rider_count+1, lengths.data(), sizeof(size_t) * lengths.size());
+
+          std::vector<Field> offline_arith_comm(arith_comm);
+        
+          for(size_t i = 0; i < rand_sh_sec_num; i++) {
+            offline_arith_comm[i] = rand_sh_sec[driver][i];
+          }
+          for(size_t i = 0; i < rand_sh_party_num; i++) {
+            offline_arith_comm[rand_sh_sec_num + i] = rand_sh_party[driver][i];
+          }
+          network_->send(driver+rider_count+1, offline_arith_comm.data(), sizeof(Field) * arith_comm);
+        }));        
+      }
+      for (auto& f: offline_t) {
+        f.get();
       }
     }
   }

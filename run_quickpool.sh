@@ -3,7 +3,8 @@
 
 rider_count=$1
 driver_count=$2
-run_opt=$3
+thread_count=$3
+run_opt=$4
 
 if test $run_opt = 0
 then
@@ -24,7 +25,7 @@ fi
 # rm -rf $dir/*.log $dir/*.json
 mkdir -p $dir
 
-$run_app -p 0 --localhost -r $rider_count -d $driver_count 2>&1 | tee -a $dir/r_$1_d_$2_0.log &
+$run_app -p 0 --localhost -r $rider_count -d $driver_count -t $thread_count 2>&1 | tee -a $dir/r_$1_d_$2_0.log &
 codes[0]=$!
 
 for rider in $(seq 1 $rider_count)

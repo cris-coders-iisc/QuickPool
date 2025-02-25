@@ -1,10 +1,9 @@
 #include "netmp.h"
 #include "rand_gen_pool.h"
 #include "helpers.h"
-#include "aes.h"
 #include "ED_eval.h"
 
-#define DRIVER_RIDER_MATCH_THRESHOLD 5000
+#define DRIVER_RIDER_MATCH_THRESHOLD 10
 #define VERTEX_NUM 4096
 
 namespace quickpool {
@@ -17,14 +16,14 @@ class Intersection_eval {
     int security_param_;
     RandGenPool rgen_;
     std::shared_ptr<ThreadPool> tpool_;
-    std::vector<uint64_t> routes;
+    emp::block routes[VERTEX_NUM];
 
 public:
     Intersection_eval(int id, int rider_count, int driver_count, std::shared_ptr<io::NetIOMP> network, int security_param, int threads, int seed=200);
 
     void setInputs();
 
-    std::vector<uint64_t> getInputs();
+    emp::block* getInputs();
     
     std::vector<bool> processIntersectionMatching();
 

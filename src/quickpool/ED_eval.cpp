@@ -9,9 +9,8 @@ ED_eval::ED_eval(int id, int rider_count, int driver_count, std::shared_ptr<io::
     network_(network),
     circ_(circ),
     security_param_(security_param),
-    threads_(threads),
     seed_(seed)
-    { }
+    {tpool_ = std::make_shared<ThreadPool>(threads);}
 
 // checking if the current party is a rider or not
 bool ED_eval::amIRider() {
@@ -27,9 +26,9 @@ bool ED_eval::amIDriver() {
 std::vector<Field> ED_eval::pair_matching(const std::unordered_map<wire_t, int>& input_pid_map, const std::unordered_map<wire_t, Field>& inputs, int rider_index, int driver_index) {
     std::vector<Field> res(circ_.outputs.size());  
     if (id_==0 || id_==rider_index || id_==driver_index) {
-        OfflineEvaluator eval(id_, rider_count, driver_count, network_, circ_, security_param_, threads_, seed_);
+        OfflineEvaluator eval(id_, rider_count, driver_count, network_, circ_, security_param_, tpool_, seed_);
         auto preproc = eval.run(input_pid_map);
-        OnlineEvaluator online_eval(id_, rider_count, driver_count, std::move(network_), std::move(preproc), circ_, security_param_, threads_, seed_);        
+        OnlineEvaluator online_eval(id_, rider_count, driver_count, std::move(network_), std::move(preproc), circ_, security_param_, tpool_, seed_);        
         auto res = online_eval.evaluateCircuit(inputs);
         return res;
     }
@@ -38,9 +37,9 @@ std::vector<Field> ED_eval::pair_matching(const std::unordered_map<wire_t, int>&
 
 // computing the Euclidean distances between start and end positions of multiple riders and drivers
 std::vector<Field> ED_eval::pair_matching(const std::unordered_map<wire_t, int>& input_pid_map, const std::unordered_map<wire_t, Field>& inputs) {
-    OfflineEvaluator eval(id_, rider_count, driver_count, network_, circ_, security_param_, threads_, seed_);
+    OfflineEvaluator eval(id_, rider_count, driver_count, network_, circ_, security_param_, tpool_, seed_);
     auto preproc = eval.run(input_pid_map);
-    OnlineEvaluator online_eval(id_, rider_count, driver_count, std::move(network_), std::move(preproc), circ_, security_param_, threads_, seed_);
+    OnlineEvaluator online_eval(id_, rider_count, driver_count, std::move(network_), std::move(preproc), circ_, security_param_, tpool_, seed_);
     auto res = online_eval.evaluateCircuit(inputs);
     return res;
 }
@@ -51,7 +50,7 @@ std::vector<Field> ED_eval::pair_EDMatching(const std::unordered_map<wire_t, int
     
     if (id_==0 || id_==rider_index || id_==driver_index) {
         // preprocessing phase for computing the Euclidean distances
-        OfflineEvaluator eval(id_, rider_count, driver_count, network_, circ_, security_param_, threads_, seed_);
+        OfflineEvaluator eval(id_, rider_count, driver_count, network_, circ_, security_param_, tpool_, seed_);
         auto preproc = eval.run(input_pid_map);
 
         Field mask0, mask1;
@@ -61,7 +60,7 @@ std::vector<Field> ED_eval::pair_EDMatching(const std::unordered_map<wire_t, int
         }        
         
         //online phase for computing the Euclidean distances
-        OnlineEvaluator online_eval(id_, rider_count, driver_count, network_, std::move(preproc), circ_, security_param_, threads_, seed_);
+        OnlineEvaluator online_eval(id_, rider_count, driver_count, network_, std::move(preproc), circ_, security_param_, tpool_, seed_);
         online_eval.setInputs(inputs);
         for (size_t i = 0; i < circ_.gates_by_level.size(); ++i) {
             online_eval.evaluateGatesAtDepth(i);
@@ -130,7 +129,7 @@ std::vector<Field> ED_eval::pair_EDMatching(const std::unordered_map<wire_t, int
     std::vector<Field> output;
     
     // preprocessing phase for computing the Euclidean distances
-    OfflineEvaluator eval(id_, rider_count, driver_count, network_, circ_, security_param_, threads_, seed_);
+    OfflineEvaluator eval(id_, rider_count, driver_count, network_, circ_, security_param_, tpool_, seed_);
     auto preproc = eval.run(input_pid_map);
 
     std::vector<Field> masks;
@@ -142,33 +141,50 @@ std::vector<Field> ED_eval::pair_EDMatching(const std::unordered_map<wire_t, int
     }        
     
     // online phase for computing the Euclidean distances
-    OnlineEvaluator online_eval(id_, rider_count, driver_count, network_, std::move(preproc), circ_, security_param_, threads_, seed_);
+    OnlineEvaluator online_eval(id_, rider_count, driver_count, network_, std::move(preproc), circ_, security_param_, tpool_, seed_);
     online_eval.setInputs(inputs);
     for (size_t i = 0; i < circ_.gates_by_level.size(); ++i) {
         online_eval.evaluateGatesAtDepth(i);
     }
 
     // DCF to compare if the distances are within the given thresholds
-    std::vector<Field> lengths(rider_count+driver_count,0);
+    // std::vector<Field> lengths(rider_count+driver_count,0);
+    std::vector<Field> lengths(rider_count+driver_count,driver_count*2);
     if (id_==0) {
         uint8_t k_rider[KEY_LEN], k_driver[KEY_LEN];
-        std::vector<std::vector<uint8_t>> keys_for_parties(rider_count+driver_count);
+        // std::vector<std::vector<uint8_t>> keys_for_parties(rider_count+driver_count);
+        std::vector<std::vector<uint8_t>> keys_for_parties(rider_count+driver_count, std::vector<uint8_t>(driver_count*2*KEY_LEN, 0));
+        std::vector<std::future<void>> circ_t;
         for (size_t i = 0; i < circ_.outputs.size(); i++) {
-            auto wout = circ_.outputs[i];
-            int rider_id = circ_.output_owners[wout][0];
-            int driver_id = circ_.output_owners[wout][1];
-            Field mask = masks[i];
-            // SP generates the keys for DCF and sends to riders and drivers
-            DCF_gen(mask, k_rider, k_driver);            
-            for (size_t j=0; j<KEY_LEN; j++) {
-                keys_for_parties[rider_id-1].push_back(k_rider[j]);
-                keys_for_parties[driver_id-1].push_back(k_driver[j]);
-            }
-            lengths[rider_id-1]++;
-            lengths[driver_id-1]++;
+            circ_t.push_back(tpool_->enqueue([&,i]() {
+                auto wout = circ_.outputs[i];
+                int rider_id = circ_.output_owners[wout][0];
+                int driver_id = circ_.output_owners[wout][1];
+                // std::cout << "output gate count : " << i << ", rider_id = " << rider_id << ", driver_id = " << driver_id << std::endl;
+                Field mask = masks[i];
+                // SP generates the keys for DCF and sends to riders and drivers
+                DCF_gen(mask, k_rider, k_driver);            
+                for (size_t j=0; j<KEY_LEN; j++) {
+                    // keys_for_parties[rider_id-1].push_back(k_rider[j]);
+                    // keys_for_parties[driver_id-1].push_back(k_driver[j]);
+                    memcpy(&keys_for_parties[rider_id-1][0]+((driver_id-rider_count-1)*KEY_LEN), k_rider, sizeof(k_rider));
+                    memcpy(&keys_for_parties[driver_id-1][0]+((rider_id-1)*KEY_LEN), k_driver, sizeof(k_driver));
+                }
+                // lengths[rider_id-1]++;
+                // lengths[driver_id-1]++;
+            }));
         }
+        for (auto& f: circ_t) {
+            f.get();
+        }
+        std::vector<std::future<void>> send_t;
         for (size_t i = 1; i <= rider_count+driver_count; i++) {
-            network_->send(i, keys_for_parties[i-1].data(), keys_for_parties[i-1].size() * sizeof(uint8_t));
+            send_t.push_back(tpool_->enqueue([&,i]() {
+                network_->send(i, keys_for_parties[i-1].data(), keys_for_parties[i-1].size() * sizeof(uint8_t));
+            })); 
+        }
+        for (auto& f: send_t) {
+            f.get();
         }
     }
 
@@ -223,9 +239,15 @@ std::vector<Field> ED_eval::pair_EDMatching(const std::unordered_map<wire_t, int
         std::vector<std::vector<Field>> output_shares(rider_count+driver_count);
         // network_->flush();
         network_->flush(rider_count, driver_count);
+        std::vector<std::future<void>> recv_t;
         for (size_t i = 1; i <= rider_count+driver_count; i++) {
-            output_shares[i-1].resize(lengths[i-1]);
-            network_->recv(i, output_shares[i-1].data(), lengths[i-1]*sizeof(Field));
+            recv_t.push_back(tpool_->enqueue([&,i]() {
+                output_shares[i-1].resize(lengths[i-1]);
+                network_->recv(i, output_shares[i-1].data(), lengths[i-1]*sizeof(Field));
+            }));
+        }
+        for (auto& f: recv_t) {
+            f.get();
         }
         std::vector<size_t> index(rider_count+driver_count, 0);
         for (size_t i = 0; i < circ_.outputs.size(); i++) {

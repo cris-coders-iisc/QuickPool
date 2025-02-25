@@ -18,7 +18,7 @@ class ED_eval {
     std::shared_ptr<io::NetIOMP> network_;
     LevelOrderedCircuit circ_;
     int security_param_;
-    int threads_;
+    std::shared_ptr<ThreadPool> tpool_;
     int seed_;
 
 public:
