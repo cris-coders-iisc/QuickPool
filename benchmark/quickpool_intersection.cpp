@@ -1,16 +1,7 @@
 #include <boost/program_options.hpp>
 
 #include "utils.h"
-
-#ifdef Inter_v1
-    #include "Intersection_eval.h"
-#else
-    #ifdef Inter_v2
-        #include "Intersection_eval_2.h"
-    #else
-        #include "Intersection_eval_3.h"
-    #endif
-#endif
+#include "Intersection_eval.h"
 
 using namespace quickpool;
 using json = nlohmann::json;
